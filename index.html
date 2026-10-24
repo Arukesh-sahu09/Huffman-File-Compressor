@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Huffman File Compressor & Decompressor</title>
+  <style>
+    :root {
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --bg-tertiary: #334155;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
+      --accent-green: #4ade80;
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: #475569;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-main);
+      padding: 24px;
+      line-height: 1.5;
+    }
+    .container { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+    header { text-align: center; margin-bottom: 8px; }
+    header h1 { font-size: 2.2rem; color: var(--accent); margin-bottom: 6px; }
+    header p { color: var(--text-muted); font-size: 1rem; }
+    .tabs { display: flex; gap: 12px; border-bottom: 2px solid var(--bg-tertiary); padding-bottom: 12px; }
+    .tab-btn {
+      background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem;
+      font-weight: 600; padding: 8px 18px; cursor: pointer; border-radius: 6px;
+    }
+    .tab-btn.active { background: var(--bg-secondary); color: var(--accent); }
+    .card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+    .drop-zone {
+      border: 2px dashed var(--accent); border-radius: 12px; padding: 36px;
+      text-align: center; cursor: pointer; margin-bottom: 16px; transition: background 0.2s;
+    }
+    .drop-zone:hover { background: rgba(56, 189, 248, 0.05); }
+    .btn {
+      background: var(--accent); color: var(--bg-primary); border: none; font-weight: 700;
+      padding: 12px 24px; border-radius: 8px; cursor: pointer; font-size: 1rem;
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-green { background: var(--accent-green); color: #022c22; }
+    .btn-green:hover { background: #22c55e; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin: 20px 0; }
+    .stat-box { background: var(--bg-primary); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center; }
+    .stat-val { font-size: 1.8rem; font-weight: 800; color: var(--accent); margin-top: 4px; }
+    .table-container { max-height: 280px; overflow-y: auto; margin-top: 12px; border: 1px solid var(--border); border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+    th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { background: var(--bg-tertiary); position: sticky; top: 0; }
+    .tree-box { height: 420px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; position: relative; background: #090d16; }
+    svg { width: 100%; height: 100%; }
+    .node circle { fill: var(--bg-secondary); stroke: var(--accent); stroke-width: 2.5; }
+    .node text { fill: var(--text-main); font-size: 12px; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+    .edge { stroke: #64748b; stroke-width: 2; }
+    .edge-label { fill: var(--accent-amber); font-size: 11px; font-weight: bold; }
+    .log-box { background: #020617; border: 1px solid var(--border); border-radius: 8px; padding: 14px; font-family: monospace; font-size: 0.85rem; max-height: 180px; overflow-y: auto; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Huffman Compressor & Decompressor</h1>
+    <p>Lossless Data Compression via Priority Queue (Min-Heap) and Binary Trees</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active" id="tab-compress-btn" onclick="switchTab('compress')">1. Compress (.txt)</button>
+    <button class="tab-btn" id="tab-decompress-btn" onclick="switchTab('decompress')">2. Decompress (.huff)</button>
+  </div>
+
+  <!-- COMPRESSION VIEW -->
+  <div id="view-compress" class="card">
+    <div class="drop-zone" onclick="document.getElementById('file-input-txt').click()">
+      <p id="compress-file-label">Click here to upload your <b>.txt</b> file</p>
+      <input type="file" id="file-input-txt" accept=".txt" class="hidden" onchange="handleTextSelect(event)">
+    </div>
+    <button class="btn" id="btn-run-compress" onclick="runCompression()" disabled>Compress File</button>
+
+    <div id="compress-results" class="hidden">
+      <div class="stats-grid">
+        <div class="stat-box"><div>Original Size</div><div class="stat-val" id="stat-orig">0 B</div></div>
+        <div class="stat-box"><div>Compressed Size</div><div class="stat-val" id="stat-comp">0 B</div></div>
+        <div class="stat-box"><div>Space Saved</div><div class="stat-val" id="stat-saved" style="color:var(--accent-green);">0%</div></div>
+      </div>
+      <button class="btn btn-green" id="btn-download-huff" onclick="downloadHuff()">Download .HUFF File</button>
+
+      <h3 style="margin-top:28px; margin-bottom:8px;">Min-Heap Priority Queue Reduction Steps</h3>
+      <div class="log-box" id="heap-trace-log"></div>
+
+      <h3 style="margin-top:28px; margin-bottom:8px;">Generated Huffman Binary Tree</h3>
+      <div class="tree-box"><svg id="tree-svg"></svg></div>
+
+      <h3 style="margin-top:28px; margin-bottom:8px;">Character Frequency & Canonical Codes</h3>
+      <div class="table-container">
+        <table>
+          <thead><tr><th>Char</th><th>Frequency</th><th>Code</th><th>Bits</th></tr></thead>
+          <tbody id="codes-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- DECOMPRESSION VIEW -->
+  <div id="view-decompress" class="card hidden">
+    <div class="drop-zone" onclick="document.getElementById('file-input-huff').click()">
+      <p id="decompress-file-label">Click here to upload your <b>.huff</b> file</p>
+      <input type="file" id="file-input-huff" accept=".huff" class="hidden" onchange="handleHuffSelect(event)">
+    </div>
+    <button class="btn btn-green" id="btn-run-decompress" onclick="runDecompression()" disabled>Decompress File</button>
+
+    <div id="decompress-results" class="hidden">
+      <div class="stats-grid">
+        <div class="stat-box"><div>Status</div><div class="stat-val" style="color:var(--accent-green); font-size:1.4rem;">Lossless Restored</div></div>
+        <div class="stat-box"><div>Restored Length</div><div class="stat-val" id="stat-restored-chars">0 Chars</div></div>
+      </div>
+      <button class="btn" id="btn-download-txt" onclick="downloadRestoredTxt()">Download Restored .TXT</button>
+      <h3 style="margin-top:20px; margin-bottom:8px;">Restored File Preview</h3>
+      <textarea id="preview-text" style="width:100%; height:140px; background:#020617; border:1px solid var(--border); color:#fff; border-radius:8px; padding:12px; font-family:monospace;" readonly></textarea>
+    </div>
+  </div>
+</div>
+
+<script>
+  let rawText = "";
+  let huffBlob = null;
+  let restoredText = "";
+  let huffArrayBuffer = null;
+
+  class HuffmanNode {
+    constructor(char, freq, left = null, right = null) {
+      this.char = char;
+      this.freq = freq;
+      this.left = left;
+      this.right = right;
+    }
+  }
+
+  class MinHeap {
+    constructor() { this.heap = []; }
+    push(node) {
+      this.heap.push(node);
+      this.bubbleUp(this.heap.length - 1);
+    }
+    pop() {
+      if (this.heap.length === 0) return null;
+      const min = this.heap[0];
+      const end = this.heap.pop();
+      if (this.heap.length > 0) {
+        this.heap[0] = end;
+        this.sinkDown(0);
+      }
+      return min;
+    }
+    bubbleUp(idx) {
+      const element = this.heap[idx];
+      while (idx > 0) {
+        let parentIdx = Math.floor((idx - 1) / 2);
+        let parent = this.heap[parentIdx];
+        if (element.freq >= parent.freq) break;
+        this.heap[idx] = parent;
+        idx = parentIdx;
+      }
+      this.heap[idx] = element;
+    }
+    sinkDown(idx) {
+      const length = this.heap.length;
+      const element = this.heap[idx];
+      while (true) {
+        let leftIdx = 2 * idx + 1;
+        let rightIdx = 2 * idx + 2;
+        let swap = null;
+        if (leftIdx < length && this.heap[leftIdx].freq < element.freq) swap = leftIdx;
+        if (rightIdx < length) {
+          if ((swap === null && this.heap[rightIdx].freq < element.freq) ||
+              (swap !== null && this.heap[rightIdx].freq < this.heap[leftIdx].freq)) {
+            swap = rightIdx;
+          }
+        }
+        if (swap === null) break;
+        this.heap[idx] = this.heap[swap];
+        idx = swap;
+      }
+      this.heap[idx] = element;
+    }
+    size() { return this.heap.length; }
+  }
+
+  function switchTab(mode) {
+    document.getElementById('view-compress').classList.toggle('hidden', mode !== 'compress');
+    document.getElementById('view-decompress').classList.toggle('hidden', mode !== 'decompress');
+    document.getElementById('tab-compress-btn').classList.toggle('active', mode === 'compress');
+    document.getElementById('tab-decompress-btn').classList.toggle('active', mode === 'decompress');
+  }
+
+  function handleTextSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      rawText = ev.target.result;
+      document.getElementById('compress-file-label').innerHTML = `Selected: <b>${file.name}</b> (${file.size} bytes)`;
+      document.getElementById('btn-run-compress').disabled = false;
+    };
+    reader.readAsText(file);
+  }
+
+  function handleHuffSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      huffArrayBuffer = ev.target.result;
+      document.getElementById('decompress-file-label').innerHTML = `Selected: <b>${file.name}</b> (${file.size} bytes)`;
+      document.getElementById('btn-run-decompress').disabled = false;
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function runCompression() {
+    if (!rawText) return;
+    const freq = {};
+    for (let c of rawText) freq[c] = (freq[c] || 0) + 1;
+
+    const pq = new MinHeap();
+    for (let char in freq) pq.push(new HuffmanNode(char, freq[char]));
+
+    const logBox = document.getElementById('heap-trace-log');
+    logBox.innerHTML = `> Initialized Min-Heap with ${pq.size()} distinct character nodes.<br/>`;
+
+    let step = 1;
+    while (pq.size() > 1) {
+      const left = pq.pop();
+      const right = pq.pop();
+      const merged = new HuffmanNode(null, left.freq + right.freq, left, right);
+      logBox.innerHTML += `Step ${step++}: Merged [${formatChar(left.char)}:${left.freq}] + [${formatChar(right.char)}:${right.freq}] &rarr; Parent(${merged.freq})<br/>`;
+      pq.push(merged);
+    }
+    const root = pq.pop();
+
+    const codes = {};
+    function assignCodes(node, path) {
+      if (!node) return;
+      if (node.char !== null) {
+        codes[node.char] = path || "0";
+        return;
+      }
+      assignCodes(node.left, path + "0");
+      assignCodes(node.right, path + "1");
+    }
+    assignCodes(root, "");
+
+    let encodedBits = "";
+    for (let c of rawText) encodedBits += codes[c];
+
+    const padding = (8 - (encodedBits.length % 8)) % 8;
+    for (let i = 0; i < padding; i++) encodedBits += "0";
+
+    const byteCount = encodedBits.length / 8;
+    const byteArray = new Uint8Array(byteCount);
+    for (let i = 0; i < byteCount; i++) {
+      byteArray[i] = parseInt(encodedBits.slice(i * 8, i * 8 + 8), 2);
+    }
+
+    const header = JSON.stringify({ padding, freq });
+    const headerBytes = new TextEncoder().encode(header);
+    const headerLen = headerBytes.length;
+    const finalBuffer = new Uint8Array(4 + headerLen + byteArray.length);
+
+    new DataView(finalBuffer.buffer).setUint32(0, headerLen, false);
+    finalBuffer.set(headerBytes, 4);
+    finalBuffer.set(byteArray, 4 + headerLen);
+
+    huffBlob = new Blob([finalBuffer], { type: 'application/octet-stream' });
+
+    const origBytes = new TextEncoder().encode(rawText).length;
+    const compBytes = finalBuffer.length;
+    const saved = Math.max(0, ((1 - (compBytes / origBytes)) * 100)).toFixed(1);
+
+    document.getElementById('stat-orig').innerText = origBytes + " B";
+    document.getElementById('stat-comp').innerText = compBytes + " B";
+    document.getElementById('stat-saved').innerText = saved + "%";
+
+    renderCodesTable(freq, codes);
+    renderTree(root);
+    document.getElementById('compress-results').classList.remove('hidden');
+  }
+
+  function runDecompression() {
+    if (!huffArrayBuffer) return;
+    const view = new DataView(huffArrayBuffer);
+    const headerLen = view.getUint32(0, false);
+
+    const headerBytes = new Uint8Array(huffArrayBuffer, 4, headerLen);
+    const { padding, freq } = JSON.parse(new TextDecoder().decode(headerBytes));
+
+    const pq = new MinHeap();
+    for (let char in freq) pq.push(new HuffmanNode(char, freq[char]));
+    while (pq.size() > 1) {
+      const left = pq.pop();
+      const right = pq.pop();
+      pq.push(new HuffmanNode(null, left.freq + right.freq, left, right));
+    }
+    const root = pq.pop();
+
+    const bitBytes = new Uint8Array(huffArrayBuffer, 4 + headerLen);
+    let bitString = "";
+    for (let b of bitBytes) bitString += b.toString(2).padStart(8, '0');
+    if (padding > 0) bitString = bitString.slice(0, -padding);
+
+    let decoded = "";
+    let curr = root;
+    for (let bit of bitString) {
+      curr = (bit === '0') ? curr.left : curr.right;
+      if (curr.char !== null) {
+        decoded += curr.char;
+        curr = root;
+      }
+    }
+    restoredText = decoded;
+    document.getElementById('stat-restored-chars').innerText = decoded.length + " Chars";
+    document.getElementById('preview-text').value = decoded;
+    document.getElementById('decompress-results').classList.remove('hidden');
+  }
+
+  function formatChar(c) {
+    if (c === null) return "Node";
+    if (c === " ") return "Space (␣)";
+    if (c === "\n") return "Newline (\\n)";
+    if (c === "\t") return "Tab (\\t)";
+    return c;
+  }
+
+  function renderCodesTable(freq, codes) {
+    const tbody = document.getElementById('codes-table-body');
+    tbody.innerHTML = "";
+    for (let char in codes) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${formatChar(char)}</td><td>${freq[char]}</td><td><code style="color:var(--accent);">${codes[char]}</code></td><td>${codes[char].length}</td>`;
+      tbody.appendChild(tr);
+    }
+  }
+
+  function renderTree(root) {
+    const svg = document.getElementById('tree-svg');
+    svg.innerHTML = '';
+    if (!root) return;
+
+    let leafCount = 0;
+    function countLeaves(node) {
+      if (!node.left && !node.right) { leafCount++; return; }
+      if (node.left) countLeaves(node.left);
+      if (node.right) countLeaves(node.right);
+    }
+    countLeaves(root);
+    const canvasWidth = Math.max(900, leafCount * 65);
+    svg.setAttribute('viewBox', `0 0 ${canvasWidth} 400`);
+
+    let currentLeafX = 40;
+    function assignPositions(node, depth) {
+      if (!node.left && !node.right) {
+        node.x = currentLeafX;
+        currentLeafX += (canvasWidth - 80) / Math.max(1, leafCount - 1);
+      } else {
+        if (node.left) assignPositions(node.left, depth + 1);
+        if (node.right) assignPositions(node.right, depth + 1);
+        node.x = ((node.left ? node.left.x : 0) + (node.right ? node.right.x : 0)) / 2;
+      }
+      node.y = 50 + (depth * 65);
+    }
+    assignPositions(root, 0);
+
+    function draw(node) {
+      if (!node) return;
+      if (node.left) {
+        drawEdge(node.x, node.y, node.left.x, node.left.y, "0");
+        draw(node.left);
+      }
+      if (node.right) {
+        drawEdge(node.x, node.y, node.right.x, node.right.y, "1");
+        draw(node.right);
+      }
+      const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      g.setAttribute("class", "node");
+      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      circle.setAttribute("cx", node.x);
+      circle.setAttribute("cy", node.y);
+      circle.setAttribute("r", 18);
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      text.setAttribute("x", node.x);
+      text.setAttribute("y", node.y);
+      text.textContent = node.char !== null ? (node.char === " " ? "␣" : node.char) : node.freq;
+      g.appendChild(circle);
+      g.appendChild(text);
+      svg.appendChild(g);
+    }
+    function drawEdge(x1, y1, x2, y2, bit) {
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("class", "edge");
+      line.setAttribute("x1", x1); line.setAttribute("y1", y1);
+      line.setAttribute("x2", x2); line.setAttribute("y2", y2);
+      svg.appendChild(line);
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      text.setAttribute("class", "edge-label");
+      text.setAttribute("x", (x1 + x2) / 2 + (bit === "0" ? -12 : 8));
+      text.setAttribute("y", (y1 + y2) / 2);
+      text.textContent = bit;
+      svg.appendChild(text);
+    }
+    draw(root);
+  }
+
+  function downloadHuff() {
+    if (!huffBlob) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(huffBlob);
+    a.download = "compressed.huff";
+    a.click();
+  }
+
+  function downloadRestoredTxt() {
+    if (!restoredText) return;
+    const blob = new Blob([restoredText], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = "restored.txt";
+    a.click();
+  }
+</script>
+</body>
+</html>
+
